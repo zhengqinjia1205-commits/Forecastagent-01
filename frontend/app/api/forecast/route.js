@@ -1,7 +1,12 @@
 function normalizeBaseUrl(raw) {
   const s = String(raw || "").trim()
   if (!s) return ""
-  const withProto = s.startsWith("http://") || s.startsWith("https://") ? s : `http://${s}`
+  if (s.startsWith("http://") || s.startsWith("https://")) return s.replace(/\/+$/, "")
+  const host = s.replace(/^\/\//, "").split("/")[0] || ""
+  const isLocal =
+    host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("0.0.0.0") || host.endsWith(".local")
+  const proto = isLocal ? "http://" : "https://"
+  const withProto = `${proto}${s.replace(/^\/\//, "")}`
   return withProto.replace(/\/+$/, "")
 }
 
@@ -20,15 +25,19 @@ export async function POST(request) {
   }
 
   try {
-    const res = await fetch(`${apiBase}/api/forecast`, {
-      method: "POST",
-      body: form,
-    })
-
-    const contentType = res.headers.get("content-type") || "application/json"
-    const body = await res.arrayBuffer()
-    return new Response(body, { status: res.status, headers: { "content-type": contentType } })
-  } catch {
-    return Response.json({ error: "unreachable api_base" }, { status: 502 })
+    const res = await fetch(`${apiBase}/api/forecast`, { method: "POST", body: form })
+    return new Response(res.body, { status: res.status, headers: res.headers })
+  } catch (e) {
+    const cause = e?.cause
+    return Response.json(
+      {
+        error: "unreachable api_base",
+        message: String(e?.message || e),
+        cause: cause ? String(cause?.message || cause) : undefined,
+        code: cause?.code,
+        api_base: apiBase,
+      },
+      { status: 502 }
+    )
   }
 }
